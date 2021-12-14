@@ -34,7 +34,7 @@ class LogSpectrogram(tf.compat.v1.keras.layers.Layer):
 
             return log_spec
 
-        spectrograms = tf.signal.stft(waveforms,
+        spectrograms = tf.signal.stft(tf.cast(waveforms, tf.float32),
                                       frame_length=self.fft_size,
                                       frame_step=self.hop_size,
                                       pad_end=False)
@@ -45,6 +45,15 @@ class LogSpectrogram(tf.compat.v1.keras.layers.Layer):
         log_spectrograms = (log_spectrograms - tf.keras.backend.mean(log_spectrograms))/tf.keras.backend.std(log_spectrograms)
         
         return log_spectrograms
+    
+    def get_config(self):
+        config = {
+            'fft_size': self.fft_size,
+            'hop_size': self.hop_size
+        }
+        config.update(super(LogSpectrogram, self).get_config())
+
+        return config
 
 
 def inverse_stft(n_fft, hop_size, tensor):

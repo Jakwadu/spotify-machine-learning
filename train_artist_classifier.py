@@ -20,6 +20,7 @@ SAMPLE_LIMIT = SNIPPET_LENGTH*SAMPLE_RATE
 
 np.random.seed(123)
 tf.random.set_seed(123)
+tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 
 def generate_bulk_training_data(data_directory, validation_split=DEFAULT_VALIDATION_SPLIT, scale_data=True):
@@ -33,6 +34,7 @@ def generate_bulk_training_data(data_directory, validation_split=DEFAULT_VALIDAT
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 audio_data, sr = librosa.load(file, sr=SAMPLE_RATE)
+            audio_data = audio_data.astype(np.float16)
             n_splits = len(audio_data) // SAMPLE_LIMIT
             audio_data = audio_data[:n_splits * SAMPLE_LIMIT]
             audio_data = np.split(audio_data, list(range(SAMPLE_LIMIT, len(audio_data), SAMPLE_LIMIT)))
