@@ -130,6 +130,7 @@ dmypy.json
 
 # Project specific
 artists/
+all_artists/
 *.pkl
 *.h5
 *.csv

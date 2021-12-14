@@ -3,6 +3,8 @@ import os
 import sys
 import json
 import re
+import pandas as pd
+from tqdm import tqdm
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from typing import List
@@ -22,10 +24,6 @@ class Track:
     preview: str
 
 
-ARTIST_TO_ARTIST_CODE = {
-}
-
-
 def set_authorization_token():
     if 'SPOTIFY_AUTHORIZATION_TOKEN' not in os.environ:
         os.environ['SPOTIFY_AUTHORIZATION_TOKEN'] = input('Authorization token:')
@@ -39,11 +37,10 @@ def download_song_preview(artist_name, url, song_name="sample"):
     else:
         artist_name = re.sub('[^A-Za-z0-9 ]+', '', artist_name)
         song_name = re.sub('[^A-Za-z0-9 ]+', '', song_name)
-        directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), artist_name)
+        directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'all_artists', artist_name)
         if not os.path.exists(directory):
             os.mkdir(directory)
         file_path = os.path.join(directory, song_name + ".mp3")
-        print(f'Saving {song_name}.mp3')
         with open(file_path, 'wb') as f:
             f.write(byte_data)
         print(f'{song_name} saved to {file_path}')
@@ -54,32 +51,42 @@ def download_artist_song_previews(artist_id):
 
 
 class SongSampler:
-    def __init__(self, n_songs: int = 20, song_directory=None, artists=None):
+    def __init__(self, n_songs: int = 20, song_directory=None, artist_ids=None):
         self.token = os.getenv('SPOTIFY_AUTHORIZATION_TOKEN')
         self.n_songs = n_songs
+        
         if song_directory:
             self.song_directory = song_directory
         else:
             self.song_directory = os.path.dirname(os.path.realpath(__file__))
-        self.top_artists = self.get_top_artists()
-        self.top_tracks = self.get_top_tracks(self.top_artists)
-        if artists is not None:
-            assert isinstance(artists, list), '"artists" should be provided in the form of a list'
-            self.artists = [ARTIST_TO_ARTIST_CODE[artist] for artist in artists]
         
-    def get_top_artists(self):
-        url = 'https://api.spotify.com/v1/me/top/artists'
-        response = requests.get(
-            url,
-            headers={
-                "Authorization": f"Bearer {self.token}"
-            }
-        )
-        response = response.text
-        response = json.loads(response)
-        artists = [
-            Artist(item['name'], item['genres'], item['href']) for item in response['items']
-        ]
+        self.artist_ids = artist_ids
+        
+        self.artists = self.get_artists()
+        self.top_tracks = self.get_top_tracks(self.artists)
+        
+    def get_artists(self):
+        if self.artist_ids is None:
+            url = 'https://api.spotify.com/v1/me/top/artists'
+            response = requests.get(
+                url,
+                headers={
+                    "Authorization": f"Bearer {self.token}"
+                }
+            )
+            response = response.text
+            response = json.loads(response)
+            artists = [
+                Artist(item['name'], item['genres'], item['href']) for item in response['items']
+            ]
+        else:
+            assert os.path.exists(self.artist_ids), 'Could not find file with artist ids'
+            df = pd.read_csv(self.artist_ids)
+            artists = []
+            url = 'https://api.spotify.com/v1/artists/'
+            for idx in range(len(df)):
+                endpoint = url + df.iloc[idx]['id']
+                artists.append(Artist(df.iloc[idx]['artist'], df.iloc[idx]['genre'], endpoint))
         return artists
     
     def get_top_tracks(self, artists: list):
@@ -102,7 +109,7 @@ class SongSampler:
         return top_tracks
   
     def get_song_previews(self):
-        for artist, tracks in self.top_tracks.items():
+        for _, (artist, tracks) in tqdm(enumerate(self.top_tracks.items()), desc='Downloading song previews for artists'):
             for track in tracks:
                 download_song_preview(artist, track.preview, track.name)
 
@@ -126,5 +133,5 @@ class SongLabelDataset:
 
 if __name__ == '__main__':
     set_authorization_token()
-    sampler = SongSampler()
+    sampler = SongSampler(artist_ids='artist_ids.csv')
     sampler.get_song_previews()
