@@ -7,11 +7,12 @@ import numpy as np
 import pickle
 import pandas as pd
 from tqdm import trange
-from models import build_classifier
+from models import build_classifier, LogSpectrogram
 from matplotlib import pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 
 DATA_DIR = 'C:\\Users\\Jamie\\Documents\\MiscProjects\\spotify-machine-learning\\all_artists'
+PICKLED_DATA_DIR = 'E:'
 DEFAULT_VALIDATION_SPLIT = 0.3
 DEFAULT_BATCH_SIZE = 80
 SAMPLE_RATE = 22050
@@ -103,25 +104,26 @@ def build_data_generators(data_directory, validation_split=DEFAULT_VALIDATION_SP
 
 
 def get_training_data(scale_data=False, save_loaded_data=False, check_saved_data=False):
-    load_data = os.path.exists('audio_snippets.pkl') and os.path.exists('labels.pkl') and check_saved_data
+    audio_path = os.path.join(PICKLED_DATA_DIR, 'audio_snippets.pkl')
+    label_path = os.path.join(PICKLED_DATA_DIR, 'labels.pkl')
+    load_data = os.path.exists(audio_path) and os.path.exists(label_path) and check_saved_data
     if load_data:
-        with open('audio_snippets.pkl', 'rb') as f:
+        with open(audio_path, 'rb') as f:
             data = pickle.load(f)
-        with open('labels.pkl', 'rb') as f:
+        with open(label_path, 'rb') as f:
             label_dictionary = pickle.load(f)
     else:
         data, label_dictionary = generate_bulk_training_data(DATA_DIR, scale_data=scale_data)
         if save_loaded_data:
-            with open('audio_snippets.pkl', 'wb') as f:
+            with open(audio_path, 'wb') as f:
                 pickle.dump(data, f)
-            with open('labels.pkl', 'wb') as f:
+            with open(label_path, 'wb') as f:
                 pickle.dump(label_dictionary, f)
     return data, label_dictionary
 
 
 if __name__ == '__main__':
-    training_data, artist_to_label = get_training_data()
-    x_train, y_train, x_val, y_val = training_data
+    (x_train, y_train, x_val, y_val), artist_to_label = get_training_data(save_loaded_data=True, check_saved_data=True)
     label_to_artist = {v: k for k, v in artist_to_label.items()}
 
     classifier = build_classifier(input_len=x_train.shape[1], n_classes=y_train.shape[1])
@@ -134,6 +136,12 @@ if __name__ == '__main__':
     training_history.to_csv('training_history.csv', index=False)
 
     classifier.save('song_artist_classifier.h5')
+
+    del x_train
+    del y_train
+
+    # classifier = tf.keras.models.load_model('song_artist_classifier.h5', custom_objects={"LogSpectrogram":LogSpectrogram})
+    # training_history = pd.read_csv('training_history.csv')
 
     # Evaluate on validation data and plot confusion matrix
     y_pred = np.argmax(classifier.predict(x_val), axis=1)
