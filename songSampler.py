@@ -54,17 +54,17 @@ class SongSampler:
     def __init__(self, n_songs: int = 20, song_directory=None, artist_ids=None):
         self.token = os.getenv('SPOTIFY_AUTHORIZATION_TOKEN')
         self.n_songs = n_songs
-        
+
         if song_directory:
             self.song_directory = song_directory
         else:
             self.song_directory = os.path.dirname(os.path.realpath(__file__))
-        
+
         self.artist_ids = artist_ids
-        
+
         self.artists = self.get_artists()
         self.top_tracks = self.get_top_tracks(self.artists)
-        
+
     def get_artists(self):
         if self.artist_ids is None:
             url = 'https://api.spotify.com/v1/me/top/artists'
@@ -88,7 +88,7 @@ class SongSampler:
                 endpoint = url + df.iloc[idx]['id']
                 artists.append(Artist(df.iloc[idx]['artist'], df.iloc[idx]['genre'], endpoint))
         return artists
-    
+
     def get_top_tracks(self, artists: list):
         top_tracks = {}
         for artist in artists:
@@ -107,28 +107,11 @@ class SongSampler:
             artist_top_tracks = [Track(item['name'], item['href'], item['preview_url']) for item in response['tracks']]
             top_tracks[artist.name] = artist_top_tracks
         return top_tracks
-  
+
     def get_song_previews(self):
         for _, (artist, tracks) in tqdm(enumerate(self.top_tracks.items()), desc='Downloading song previews for artists'):
             for track in tracks:
                 download_song_preview(artist, track.preview, track.name)
-
-
-class SongLabelDataset:
-    def __init__(self, n_songs=10000, use_metadata=True):
-        ...
-
-    def build_metadata(self):
-        ...
-
-    def save_metadata(self):
-        ...
-
-    def download_song_previews(self):
-        ...
-
-    def data_generator(self):
-        ...
 
 
 if __name__ == '__main__':
