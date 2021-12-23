@@ -14,7 +14,7 @@ from sklearn.metrics import ConfusionMatrixDisplay
 DATA_DIR = 'C:\\Users\\Jamie\\Documents\\MiscProjects\\spotify-machine-learning\\all_artists'
 PICKLED_DATA_DIR = 'E:'
 DEFAULT_VALIDATION_SPLIT = 0.3
-DEFAULT_BATCH_SIZE = 80
+DEFAULT_BATCH_SIZE = 200
 SAMPLE_RATE = 22050
 SNIPPET_LENGTH = 3
 SAMPLE_LIMIT = SNIPPET_LENGTH*SAMPLE_RATE
@@ -24,14 +24,25 @@ tf.random.set_seed(123)
 tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 
-def generate_bulk_training_data(data_directory, validation_split=DEFAULT_VALIDATION_SPLIT, scale_data=True):
+def generate_bulk_training_data(data_directory,
+                                validation_split=DEFAULT_VALIDATION_SPLIT,
+                                scale_data=True,
+                                classify_songs=True):
     artist_dirs = [os.path.join(data_directory, dir_) for dir_ in os.listdir(data_directory)]
-    label_dict = {os.path.basename(artist_dir): idx for idx, artist_dir in enumerate(artist_dirs)}
-    song_splits = []
+    if classify_songs:
+        label_dict = {}
+    else:
+        label_dict = {os.path.basename(artist_dir): idx for idx, artist_dir in enumerate(artist_dirs)}
+    training = []
+    validation = []
+
     for idx in trange(len(artist_dirs), desc='Creating snippets from artist song samples'):
         artist = os.path.basename(artist_dirs[idx])
         song_files = [os.path.join(artist_dirs[idx], f) for f in os.listdir(artist_dirs[idx]) if '.mp3' in f]
-        for file in song_files:
+        threshold = int(len(song_files)*(1-validation_split))
+        song_index = 0
+
+        for idx1, file in enumerate(song_files):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 audio_data, sr = librosa.load(file, sr=SAMPLE_RATE)
@@ -39,12 +50,18 @@ def generate_bulk_training_data(data_directory, validation_split=DEFAULT_VALIDAT
             n_splits = len(audio_data) // SAMPLE_LIMIT
             audio_data = audio_data[:n_splits * SAMPLE_LIMIT]
             audio_data = np.split(audio_data, list(range(SAMPLE_LIMIT, len(audio_data), SAMPLE_LIMIT)))
-            audio_data = [[data, label_dict[artist]] for data in audio_data]
-            song_splits += audio_data
-    random.shuffle(song_splits)
-    threshold = int(len(song_splits)*(1-validation_split))
-    training = song_splits[:threshold]
-    validation = song_splits[threshold:]
+            if classify_songs:
+                audio_data = [[data, song_counter for data in audio_data]
+                label_dict[os.path.basename(file)] = song_index
+            else:
+                audio_data = [[data, label_dict[artist]] for data in audio_data]
+
+            training += audio_data[:threshold]
+            validation += audio_data[threshold:]
+
+    random.shuffle(training)
+    random.shuffle(validation)
+
     x_train = np.array([split[0] for split in training])
     y_train = np.array([split[1] for split in training])
     x_val = np.array([split[0] for split in validation])
@@ -123,14 +140,14 @@ def get_training_data(scale_data=False, save_loaded_data=False, check_saved_data
 
 
 if __name__ == '__main__':
-    (x_train, y_train, x_val, y_val), artist_to_label = get_training_data(save_loaded_data=True, check_saved_data=True)
+    (x_train, y_train, x_val, y_val), artist_to_label = get_training_data(save_loaded_data=True, check_saved_data=True, scale_data=False)
     label_to_artist = {v: k for k, v in artist_to_label.items()}
 
-    classifier = build_classifier(input_len=x_train.shape[1], n_classes=y_train.shape[1])
+    classifier = build_classifier(input_len=x_train.shape[1], n_classes=y_train.shape[1], stem='conv')
     reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(patience=5, factor=1./3.)
     stop_early = tf.keras.callbacks.EarlyStopping(patience=10)
 
-    history = classifier.fit(x_train, y_train, batch_size=DEFAULT_BATCH_SIZE, epochs=100, 
+    history = classifier.fit(x_train, y_train, batch_size=DEFAULT_BATCH_SIZE, epochs=100,
                              validation_data=(x_val, y_val), callbacks=[reduce_lr, stop_early])
     training_history = pd.DataFrame(history.history)
     training_history.to_csv('training_history.csv', index=False)
@@ -162,5 +179,3 @@ if __name__ == '__main__':
     plt.plot(training_history['val_loss'])
     plt.legend(['Training', 'Validation'])
     plt.show()
-
-

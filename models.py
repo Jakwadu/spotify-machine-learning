@@ -61,54 +61,71 @@ class LogSpectrogram(tf.compat.v1.keras.layers.Layer):
 
 def build_classifier(n_classes=20,
                      input_len=SAMPLE_LIMIT,
-                     stem=None,
-                     optimiser='adam',
+                     stem='conv',
+                     optimiser=tf.keras.optimizers.Adam(learning_rate=3e-4),
                      loss='categorical_crossentropy',
-                     conv_activation='relu'):
+                     conv_activation=tf.keras.layers.ReLU(),
+                     conv_padding='causal'):
+
+    assert stem == 'conv' or stem == 'lstm'
 
     model = tf.keras.Sequential()
 
     model.add(tf.keras.layers.Input((input_len, )))
     model.add(LogSpectrogram(2048))
 
-    model.add(tf.keras.layers.Conv1D(32, 3))
-    model.add(tf.keras.layers.Conv1D(32, 3, activation=conv_activation))
-    model.add(tf.keras.layers.BatchNormalization())
-    model.add(tf.keras.layers.Conv1D(32, 3))
-    model.add(tf.keras.layers.Conv1D(32, 3, activation=conv_activation))
-    model.add(tf.keras.layers.BatchNormalization())
+    if stem == 'conv':
+        model.add(tf.keras.layers.Conv1D(32, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(32, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Conv1D(32, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(32, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
 
-    model.add(tf.keras.layers.Conv1D(64, 3))
-    model.add(tf.keras.layers.Conv1D(64, 3, activation=conv_activation))
-    model.add(tf.keras.layers.BatchNormalization())
-    model.add(tf.keras.layers.Conv1D(64, 3))
-    model.add(tf.keras.layers.Conv1D(64, 3, activation=conv_activation))
-    model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Conv1D(64, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(64, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Conv1D(64, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(64, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
 
-    model.add(tf.keras.layers.Conv1D(128, 3))
-    model.add(tf.keras.layers.Conv1D(128, 3, activation=conv_activation))
-    model.add(tf.keras.layers.BatchNormalization())
-    model.add(tf.keras.layers.Conv1D(128, 3))
-    model.add(tf.keras.layers.Conv1D(128, 3, activation=conv_activation))
-    model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Conv1D(128, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(128, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Conv1D(128, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(128, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
 
-    model.add(tf.keras.layers.Conv1D(256, 3))
-    model.add(tf.keras.layers.Conv1D(256, 3, activation=conv_activation))
-    model.add(tf.keras.layers.BatchNormalization())
-    model.add(tf.keras.layers.Conv1D(256, 3))
-    model.add(tf.keras.layers.Conv1D(256, 3, activation=conv_activation))
-    model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Conv1D(256, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(256, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Conv1D(256, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(256, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
 
-    # model.add(tf.keras.layers.Conv1D(512, 3))
-    # model.add(tf.keras.layers.Conv1D(512, 3, activation=conv_activation))
-    # model.add(tf.keras.layers.BatchNormalization())
-    # model.add(tf.keras.layers.Conv1D(512, 3))
-    # model.add(tf.keras.layers.Conv1D(512, 3, activation=conv_activation))
-    # model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Conv1D(512, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(512, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Conv1D(512, 3, padding=conv_padding))
+        model.add(tf.keras.layers.Conv1D(512, 3, padding=conv_padding))
+        model.add(conv_activation)
+        model.add(tf.keras.layers.BatchNormalization())
 
-    model.add(tf.keras.layers.GlobalAveragePooling1D())
-    model.add(tf.keras.layers.Dense(512, activation=conv_activation))
-    model.add(tf.keras.layers.Dropout(0.2))
+        model.add(tf.keras.layers.GlobalAveragePooling1D())
+
+    elif stem == 'lstm':
+        model.add(tf.keras.layers.LSTM(1024))
+
+    model.add(tf.keras.layers.Dropout(0.))
     model.add(tf.keras.layers.Dense(n_classes, activation='softmax'))
 
     model.compile(optimizer=optimiser, loss=loss)
