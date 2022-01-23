@@ -14,7 +14,7 @@ from sklearn.metrics import ConfusionMatrixDisplay
 DATA_DIR = 'C:\\Users\\Jamie\\Documents\\MiscProjects\\spotify-machine-learning\\all_artists'
 PICKLED_DATA_DIR = 'E:'
 DEFAULT_VALIDATION_SPLIT = 0.3
-DEFAULT_BATCH_SIZE = 200
+DEFAULT_BATCH_SIZE = 256
 SAMPLE_RATE = 22050
 SNIPPET_LENGTH = 3
 SAMPLE_LIMIT = SNIPPET_LENGTH*SAMPLE_RATE
@@ -35,12 +35,12 @@ def generate_bulk_training_data(data_directory,
         label_dict = {os.path.basename(artist_dir): idx for idx, artist_dir in enumerate(artist_dirs)}
     training = []
     validation = []
+    song_index = 0
 
     for idx in trange(len(artist_dirs), desc='Creating snippets from artist song samples'):
         artist = os.path.basename(artist_dirs[idx])
         song_files = [os.path.join(artist_dirs[idx], f) for f in os.listdir(artist_dirs[idx]) if '.mp3' in f]
         threshold = int(len(song_files)*(1-validation_split))
-        song_index = 0
 
         for idx1, file in enumerate(song_files):
             with warnings.catch_warnings():
@@ -51,8 +51,11 @@ def generate_bulk_training_data(data_directory,
             audio_data = audio_data[:n_splits * SAMPLE_LIMIT]
             audio_data = np.split(audio_data, list(range(SAMPLE_LIMIT, len(audio_data), SAMPLE_LIMIT)))
             if classify_songs:
-                audio_data = [[data, song_counter for data in audio_data]
-                label_dict[os.path.basename(file)] = song_index
+                audio_data = [[data, song_index] for data in audio_data]
+                # Ensure existing entry is not overwritten before updating label dictionary
+                song_name = artist + ' - ' + os.path.basename(file)
+                label_dict[song_name] = song_index
+                song_index += 1
             else:
                 audio_data = [[data, label_dict[artist]] for data in audio_data]
 
@@ -79,6 +82,9 @@ def generate_bulk_training_data(data_directory,
 
     y_train = tf.keras.utils.to_categorical(y_train)
     y_val = tf.keras.utils.to_categorical(y_val)
+
+    # Check the number of classes equels the number of key-value pairs in the label dictionary
+    assert y_train.shape[1] == len(label_dict), f'{y_train.shape[1]} != {len(label_dict)}'
 
     return (x_train, y_train, x_val, y_val), label_dict
 
@@ -140,15 +146,16 @@ def get_training_data(scale_data=False, save_loaded_data=False, check_saved_data
 
 
 if __name__ == '__main__':
-    (x_train, y_train, x_val, y_val), artist_to_label = get_training_data(save_loaded_data=True, check_saved_data=True, scale_data=False)
+    (x_train, y_train, x_val, y_val), artist_to_label = get_training_data(save_loaded_data=True, check_saved_data=True, scale_data=True)
     label_to_artist = {v: k for k, v in artist_to_label.items()}
 
     classifier = build_classifier(input_len=x_train.shape[1], n_classes=y_train.shape[1], stem='conv')
-    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(patience=5, factor=1./3.)
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(patience=5, factor=1./3., min_lr=1e-6)
     stop_early = tf.keras.callbacks.EarlyStopping(patience=10)
 
-    history = classifier.fit(x_train, y_train, batch_size=DEFAULT_BATCH_SIZE, epochs=100,
-                             validation_data=(x_val, y_val), callbacks=[reduce_lr, stop_early])
+    history = classifier.fit(x_train, y_train, batch_size=DEFAULT_BATCH_SIZE, epochs=300,
+                             validation_data=(x_val, y_val), callbacks=[reduce_lr, stop_early],
+                             validation_batch_size=DEFAULT_BATCH_SIZE)
     training_history = pd.DataFrame(history.history)
     training_history.to_csv('training_history.csv', index=False)
 
@@ -166,7 +173,12 @@ if __name__ == '__main__':
     y_pred = [label_to_artist[y] for y in y_pred]
     y_true = [label_to_artist[y] for y in y_true]
     artist_names = list(artist_to_label.keys())
-    c_m = ConfusionMatrixDisplay.from_predictions(y_true,
+    if len(artist_names) > 30:
+        c_m = ConfusionMatrixDisplay.from_predictions(y_true,
+                                                  y_pred,
+                                                  include_values=False)
+    else:
+        c_m = ConfusionMatrixDisplay.from_predictions(y_true,
                                                   y_pred,
                                                   labels=artist_names,
                                                   include_values=False,
