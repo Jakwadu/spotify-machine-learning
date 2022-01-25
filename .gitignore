@@ -134,3 +134,4 @@ all_artists/
 *.pkl
 *.h5
 *.csv
+*.db
