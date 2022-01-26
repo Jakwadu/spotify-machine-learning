@@ -17,7 +17,7 @@ DEFAULT_SONG_DIRECTORY = './all_artists'
 
 
 def bytes_to_float32(x):
-    return np.frombuffer(x, dtype='float32')
+    return np.frombuffer(x, dtype='float16')
 
 
 def read_and_split_audio(path):
@@ -84,24 +84,28 @@ class SongDatabase:
             print('song_embeddings table not found. Has the database been built yet?')
 
     def find_unique_nearest_neighbours(self, data_point, n_neighbours=5):
-        self.db_dataframe['Distance'] = np.linalg.norm(self.db_dataframe['Embedding'].values - data_point)
-        results = self.db_dataframe.sort_by(col=['Distance']).head(n_neighbours)
+        self.db_dataframe['Distance'] = [np.linalg.norm(ref - data_point) for ref in self.db_dataframe['Embedding'].values]
+        results = self.db_dataframe.sort_values(by=['Distance']).head(n_neighbours)
         parsed_results = []
         for idx in range(len(results)):
             result = results.iloc[idx]
-            parsed_results.append(Song(result['Song'], result['Artist'], result['Distance']))
+            parsed_results.append(Song(result['Song'].split('.')[0], result['Artist'], result['Distance']))
         return parsed_results
             
     def get_similar_songs(self, song_path, n_results=5):
         audio_slices = read_and_split_audio(song_path)
         all_results = []
         for audio_slice in audio_slices:
-            results = find_unique_nearest_neighbours(audio_slice, n_neighbours=n_results)
+            audio_slice = np.array(self.encoder.encode(audio_slice.reshape((1,-1))))
+            results = self.find_unique_nearest_neighbours(audio_slice, n_neighbours=n_results)
             all_results += results
-        sorted(all_results, key=lambda x: x.distance)
+        all_results = sorted(all_results, key=lambda x: x.distance)
         unique_results = []
         for result in all_results:
-            if len(unique_results) == 0 or result.song_name != unique_results[-1].song_name:
+            unique = True
+            if len(unique_results) > 0:
+                unique = all([result.song_name != old_result.song_name for old_result in unique_results])
+            if unique:
                 unique_results.append(result)
             if len(unique_results) >= n_results:
                 break
@@ -150,4 +154,7 @@ if __name__ == '__main__':
         print(database.summary())
     if args.similarity_search:
         results = database.get_similar_songs(args.similarity_search, args.n_results)
-        print(results)
+        reference_song = os.path.basename(args.similarity_search)[:-4]
+        print(f'\n### Songs similar to {reference_song}\n')
+        for result in results:
+            print(f'{result.artist}: {result.song_name}')
